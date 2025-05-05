@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add a site</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+
+<body>
+    { padding-top: 70px ;}
+    <!--Navbar-->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Dashboard</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"> <a class="nav-link" href="/">Visualize data</a> </li>
+                    <li class="nav-item"> <a class="nav-link" href="/sites_manager">Manage the sites</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!--Main content-->
+    <div class="container pt-5">
+        <div class="row mb-3">
+
+            <!--Form-->
+            <form id="formSite">
+                <div class="card">
+                    <div class="card-header">
+                        Site information
+                    </div>
+
+                    <div class="card-body">
+                        <!--Name-->
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="siteName">Site name</label>
+                                <input class="form-control" type="text" id="siteName" name="siteName" required>
+                            </div>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+                        </div>
+
+                        <!--Description-->
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="siteDesc">Description</label>
+                                <textarea class="form-control" id="siteDesc" name="siteDesc" cols="50" rows="4"></textarea>
+                            </div>
+                        </div>
+
+                       <!--Coordinates-->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="siteLat">Latitude</label>
+                                <input class="form-control" type="number" id="siteLat" name="siteLat" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="siteLon">Longitude</label>
+                                <input class="form-control" type="number" id="siteLon" name="siteLon" required>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <!--Button-->
+                <button type="button" class="btn btn-primary" id="submitSiteButton">Create the site</button>
+            </div>
+        </div>
+
+    </div>
+    
+</body>
+
+<script src="{{ url_for("static", filename="js/sites_manager_add.js") }}"></script>
+
+</html>
