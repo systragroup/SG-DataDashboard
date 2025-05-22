@@ -19,7 +19,7 @@ document.getElementById('submitModifButton').addEventListener('click', () => {
             const form = document.getElementById('formStudy');
             const formData = new FormData(form);
             const study = window.location.pathname.split('/').pop();
-            fetch(`/studies_manager/submit_modif/${study}`, {
+            fetch(`/study/submit_modif/${study}`, {
                 method: 'POST',
                 body: formData,
             })

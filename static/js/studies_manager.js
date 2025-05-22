@@ -1,12 +1,11 @@
 // See the study when clicked on
 document.addEventListener('DOMContentLoaded', () => {
 
-    fetch('/studies_manager/init')
+    fetch('/datajs/studies')
     .then(response => response.json())
     .then(data => {
 
         // If there are studies, create one event listener per location
-        let hmtl_content = '';
         if (data.length > 0) {
             data.forEach(id => {
                 document.getElementById(`div${id}`).addEventListener('click', () => {

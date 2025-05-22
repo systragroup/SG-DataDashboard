@@ -29,43 +29,50 @@
 
             <!--Header-->
             <div class="card-header">
-                <div class="row">
+                <div class="row mx-1">
+                    {{ name|safe }}
+                </div>
+            </div>
 
-                    <!--Name of the study-->
-                    <div class="col-md-6">
-                        {{ name|safe }}
-                    </div>
+            <!--Informations-->
+            <div class="card-body">
+
+                <!--Buttons-->
+                <div class="row mb-3">
 
                     <!--Visibility-->
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <div class="row mx-1">
                             {% if studyVisible %}
                                 <button type="button" class="btn btn-primary" id="visibilityButton">Make private</button>
                             {% else %}
                                 <button type="button" class="btn btn-primary" id="visibilityButton">Make public</button>
                             {% endif %}
-                        </div>  
+                        </div>
+                    </div>
+
+                    <!--Add a file-->
+                    <div class="col-md-3">
+                        <div class="row mx-1">
+                            <button type="button" class="btn btn-primary" id="addFileButton">Add a file</button>
+                        </div>
                     </div>
 
                     <!--Modify the study-->
-                    <div class="col-md-2">
-                        <div class="row">
+                    <div class="col-md-3">
+                        <div class="row mx-1">
                             <button type="button" class="btn btn-warning" id="modifyStudyButton">Modify the study</button>
                         </div>
                     </div>
 
                     <!--Delete the study-->
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <div class="row mx-1">
                             <button type="button" class="btn btn-danger" id="deleteStudyButton">Delete the study</button>
                         </div>  
                     </div>
-
+                    
                 </div>
-            </div>
-
-            <!--Informations-->
-            <div class="card-body">
 
                 <!--Description-->
                 <div class="row mb-3">
@@ -88,8 +95,9 @@
                 </div>
 
                 <!--Map-->
-                <div class="row mb-3">
-                    <div class="col-md-12">
+                <div class="row">
+                    <label for="mapContainer">Area of study</label>
+                    <div class="col-md-12" id="mapContainer">
                         {{ iframe|safe }}
                     </div>
                 </div>
