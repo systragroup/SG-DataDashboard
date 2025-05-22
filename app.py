@@ -1,11 +1,20 @@
 import os
+import shutil
+import pathlib
 from flask import Flask, jsonify, render_template, redirect, url_for, request
 import logging
 import logging.config
 import sqlite3
+import zipfile
 import folium
+import pandas as pd
+import geopandas as gpd
 
 
+
+#####
+# Set up
+#####
 
 # Set up the logging
 os.makedirs('logs', exist_ok=True)
@@ -52,23 +61,23 @@ logging.config.dictConfig(logging_config)
 logger = logging.getLogger(__name__)
 logger.debug('Logging is configured.')
 
-
-
-# Connect to the sites database
+# Connect to the studies database
 try:
     os.makedirs('data', exist_ok=True)
-    sites_db_path = os.path.join('data', 'sites.db')
-    con = sqlite3.connect(sites_db_path)
+    studies_db_path = os.path.join('data', 'studies.db')
+    con = sqlite3.connect(studies_db_path)
     cursor = con.cursor()
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sites (
-            name TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS studies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
             desc TEXT,
             lat FLOAT,
             lon FLOAT,
             dir_path TEXT,
             db_path TEXT,
-            siteVisible BOOL
+            shapefile_path TEXT,
+            studyVisible BOOL
         )
     ''')
     con.commit()
@@ -77,31 +86,31 @@ except Exception as e:
     logger.error(f'An error has occured while trying to connect to the database: {e}.')
 
 # Get the data
-sites = {}
+studies = {}
 try:
-    for row in cursor.execute('SELECT * FROM sites'):
-        sites[row[0]] = {}
-        sites[row[0]]['desc'] = row[1]
-        sites[row[0]]['lat'] = row[2]
-        sites[row[0]]['lon'] = row[3]
-        sites[row[0]]['dir_path'] = row[4]
-        sites[row[0]]['db_path'] = row[5]
-        sites[row[0]]['siteVisible'] = row[6]
+    for row in cursor.execute('SELECT * FROM studies'):
+        studies[row[0]] = {}
+        studies[row[0]]['name'] = row[1]
+        studies[row[0]]['desc'] = row[2]
+        studies[row[0]]['lat'] = row[3]
+        studies[row[0]]['lon'] = row[4]
+        studies[row[0]]['dir_path'] = row[5]
+        studies[row[0]]['db_path'] = row[6]
+        studies[row[0]]['shapefile_path'] = row[7]
+        studies[row[0]]['studyVisible'] = (row[8] == 1)
     con.close()
-    logger.info('Sites data retrieved succesfuly from the database.')
+    logger.info('Studies data retrieved succesfuly from the database.')
 except Exception as e:
-    logger.error(f'An error has occured while retrieving the sites data: {e}.')
+    logger.error(f'An error has occured while retrieving the studies data: {e}.')
     
-
-
 # Set up the app
 app = Flask('Data Dashboard', static_folder='static', template_folder='templates')
 
 
 
-###
-# Dashboard
-###
+#####
+# Visualization dashboard
+#####
 @app.route('/')
 def dashboard():
     map = folium.Map()
@@ -110,144 +119,282 @@ def dashboard():
 
 
 
-###
-# Sites manager
-###
+#####
+# Studies manager
+#####
 
-# List of the sites
-@app.route('/sites_manager')
-def sites_manager():
-    global sites
+# List of the studies
+@app.route('/studies_manager')
+def studies_manager():
+    global studies
     # Map
     map = folium.Map()
-    for site in sites.keys():
+    for study in studies.keys():
         folium.Marker(
-            location=[sites[site]['lat'], sites[site]['lat']],
-            tooltip=site,
+            location=[studies[study]['lat'], studies[study]['lon']],
+            tooltip=studies[study]['name'],
             icon=folium.Icon(color='red')
         ).add_to(map)
     iframe = map.get_root()._repr_html_()
-    # List of sites
-    sitesList = [{'name':site, 'visible':sites[site]['siteVisible']} for site in sites.keys()]
-    return render_template('sites_manager.html', iframe=iframe, sites=sitesList)
+    # List of studies
+    studiesList = [{'id':study, 'name':studies[study]['name'], 'visible':studies[study]['studyVisible']} for study in studies.keys()]
+    return render_template('studies_manager.html', iframe=iframe, studies=studiesList)
 
 
-# Give the site to the JavaScript to animate the list
-@app.route('/sites_manager/init')
-def sites_manager_init():
-    global sites
-    sitesVisible = {site: sites[site]['siteVisible'] for site in sites.keys()}
-    return jsonify(sitesVisible)
+# Give the studies to the JavaScript to animate the list of studies
+@app.route('/studies_manager/init')
+def studies_manager_init():
+    global studies
+    return jsonify(list(studies.keys()))
 
 
-# Page for the creation of a site
-@app.route('/sites_manager/add')
-def sites_manager_add():
-    return render_template('sites_manager_add.html')
+# Page for the creation of a study
+@app.route('/studies_manager/add')
+def studies_manager_add():
+    return render_template('studies_manager_add.html')
 
 
-# Create the site and register it in the dictionnary and the database
-@app.route('/sites_manager/create', methods=['POST'])
-def sites_manager_create():
+# Create the study and register it in the dictionnary and the database
+@app.route('/studies_manager/create', methods=['POST'])
+def studies_manager_create():
     try:
         # Get the form data
-        name = request.form.get('siteName')
-        desc = request.form.get('siteDesc')
-        lat = request.form.get('siteLat')
-        lon = request.form.get('siteLon')
-        print(name, desc, lat, lon)
+        name = request.form.get('studyName')
+        desc = request.form.get('studyDesc')
+        lat = request.form.get('studyLat')
+        lon = request.form.get('studyLon')
+        shapefile = request.files.get('studyShapefile')
         
-        # Create the directory
-        dir_path = os.path.join('data', name)
-        os.makedirs(dir_path)
-        os.makedirs(os.path.join(dir_path, 'files'))
-        db_path = os.path.join(dir_path, f'{name}.db')
-        
-        # Add the site to the dictionnary
-        global sites
-        sites[name] = {}
-        sites[name]['desc'] = desc
-        sites[name]['lat'] = lat
-        sites[name]['lon'] = lon
-        sites[name]['dir_path'] = dir_path
-        sites[name]['db_path'] = db_path
-        sites[name]['siteVisible'] = False
-        
-        # Add the site to the database
-        sites_db_path = os.path.join('data', 'sites.db')
-        con = sqlite3.connect(sites_db_path)
+        # Add the study to the database 1/2
+        studies_db_path = os.path.join('data', 'studies.db')
+        con = sqlite3.connect(studies_db_path)
         cursor = con.cursor()
         cursor.execute('''
-            INSERT INTO sites (
+            INSERT INTO studies (
                 name,
                 desc,
                 lat,
-                lon,
-                dir_path,
-                db_path,
-                siteVisible
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                lon
+            ) VALUES (?, ?, ?, ?)
         ''', (
             name,
-            desc,
+            desc.lstrip(),
             lat,
-            lon,
+            lon
+        ))
+        con.commit()
+        
+        # Get the id
+        study_id = cursor.lastrowid
+        
+        # Create the directories
+        dir_path = os.path.join('data', f'{study_id} - {name}')
+        os.makedirs(dir_path, exist_ok=False)
+        os.makedirs(os.path.join(dir_path, 'files'))
+        db_path = os.path.join(dir_path, f'{study_id} - {name}.db')
+        
+        # Download and unzip the shapefile
+        zip_path = os.path.join(dir_path, f'shapefile{name}.zip')
+        shapefile_path = os.path.join(dir_path, f'shapefile{name}')
+        shapefile.save(zip_path)
+        with zipfile.ZipFile(zip_path, 'r') as zip_file:
+            zip_file.extractall(shapefile_path)
+        os.remove(zip_path)
+        logger.info(f'Shapefile saved for {name}.')
+        if len([f for f in os.listdir(shapefile_path) if f.endswith('.shp')]) == 0: # The zipfile does not contains directly the files
+            shapefile_path = os.path.join(shapefile_path, os.listdir(shapefile_path)[0])
+        
+        # Add the study to the dictionnary
+        global studies
+        studies[study_id] = {}
+        studies[study_id]['name'] = name 
+        studies[study_id]['desc'] = desc.lstrip() 
+        studies[study_id]['lat'] = lat
+        studies[study_id]['lon'] = lon
+        studies[study_id]['dir_path'] = dir_path
+        studies[study_id]['db_path'] = db_path
+        studies[study_id]['shapefile_path'] = shapefile_path
+        studies[study_id]['studyVisible'] = False
+        
+        # Add the study to the database 2/2
+        cursor.execute('''
+            UPDATE studies
+            SET dir_path = ?,
+                db_path = ?,
+                shapefile_path = ?,
+                studyVisible = ?
+            WHERE id = ?
+        ''', (
             dir_path,
             db_path,
-            False
+            shapefile_path,
+            False,
+            study_id
         ))
         con.commit()
         con.close()
         
-        logger.info(f'The site "{name}" was created succesfuly.')
-        return jsonify({'status':'success', 'site':name})
+        logger.info(f'The study "{name}" was created succesfuly.')
+        return jsonify({'status':'success', 'study':study_id})
     
     except Exception as e:
-        logger.info(f'An error has occured while trying to create the site: {e}.')
+        logger.info(f'An error has occured while trying to create the study: {e}.')
         return jsonify({'status':'error'})
     
 
+# Modify a study
+@app.route('/studies_manager/modify/<study>', methods=['GET'])
+def studies_manager_modify(study):
+    study = int(study)
+    
+    global studies
+    name = studies[study]['name']
+    desc = studies[study]['desc']
+    lat = studies[study]['lat']
+    lon = studies[study]['lon']
+    shapefile = studies[study]['shapefile_path']
+    return render_template('study_modify.html', name=name, desc=desc, lat=lat, lon=lon, shapefile=shapefile)
+
+
+# Submit the modifications
+@app.route('/studies_manager/submit_modif/<study>', methods=['POST'])
+def studies_manager_submit_modif(study):
+    study = int(study)
+    
+    try:
+        # Get the form data
+        desc = request.form.get('studyDesc')
+        lat = request.form.get('studyLat')
+        lon = request.form.get('studyLon')
+        
+        # Modify the study in the dictionnary
+        global studies
+        studies[study]['desc'] = desc.lstrip()
+        studies[study]['lat'] = lat
+        studies[study]['lon'] = lon
+        
+        # Modify the study in the database
+        studies_db_path = os.path.join('data', 'studies.db')
+        con = sqlite3.connect(studies_db_path)
+        cursor = con.cursor()
+        cursor.execute('''
+            UPDATE studies
+            SET desc = ?,
+                lat = ?,
+                lon = ?
+            WHERE id = ?
+        ''', (
+            desc.lstrip(),
+            lat,
+            lon,
+            study
+        ))
+        con.commit()
+        con.close()
+        
+        logger.info(f'The study "{study}" was modified succesfuly.')
+        return jsonify({'status':'success', 'study':study})
+    
+    except Exception as e:
+        logger.info(f'An error has occured while trying to modify the study: {e}.')
+        return jsonify({'status':'error'})
+
+
 # Manage the visibility
-@app.route('/sites_manager/visibility/<site>')
-def sites_manager_visibility(site):
-    global sites
-    new_state = not(sites[site]['siteVisible'])
-    # Change in the dictionnary
-    sites[site]['siteVisible'] = new_state
-    # Change in the database
-    sites_db_path = os.path.join('data', 'sites.db')
-    con = sqlite3.connect(sites_db_path)
-    cursor = con.cursor()
-    cursor.execute('''
-        UPDATE sites
-        SET siteVisible = ?
-        WHERE name = ?
-    ''', (
-        new_state,
-        site
-    ))
-    con.commit()
-    con.close()
-    return jsonify({'status':'success', 'state':new_state})
+@app.route('/studies_manager/visibility/<study>')
+def studies_manager_visibility(study):
+    study = int(study)
+    
+    global studies
+    if study not in studies:
+        return jsonify({'status':'error'})
+    else:
+        
+        new_state = not(studies[study]['studyVisible'])
+        # Change in the dictionnary
+        studies[study]['studyVisible'] = new_state
+        # Change in the database
+        studies_db_path = os.path.join('data', 'studies.db')
+        con = sqlite3.connect(studies_db_path)
+        cursor = con.cursor()
+        cursor.execute('''
+            UPDATE studies
+            SET studyVisible = ?
+            WHERE id = ?
+        ''', (
+            new_state,
+            study
+        ))
+        con.commit()
+        con.close()
+        
+        return jsonify({'status':'success', 'state':new_state})
 
 
-# Delete the site
-@app.route('/sites_manager/delete/<site>')
-def sites_manager_delete(site):
-    return
+# Delete the study
+@app.route('/studies_manager/delete/<study>', methods=['POST'])
+def studies_manager_delete(study):
+    study = int(study)
+    
+    global studies
+    if study not in studies:
+        return jsonify({'status':'error'})
+    else:
+            
+        # Delete from the database
+        studies_db_path = os.path.join('data', 'studies.db')
+        con = sqlite3.connect(studies_db_path)
+        cursor = con.cursor()
+        cursor.execute('''
+            DELETE FROM studies
+            WHERE id = ?
+        ''', (
+            study,
+        ))
+        con.commit()
+        con.close()
+        
+        # Delete the folder
+        dir_path = studies[study]['dir_path']
+        shutil.rmtree(dir_path)
+        
+        # Delete from the dictionnary
+        name = studies[study]['name']
+        studies.pop(study)
+
+        logger.info(f'The study {name} has been deleted successfuly.')
+        return jsonify({'status':'success'})
 
 
 
-###
-# View and modify a site
-###
+#####
+# View and modify a study
+#####
 
-# View a site
-@app.route('/site/<site>')
-def site(site):
-    global sites
-    lat = sites[site]['lat']
-    lon = sites[site]['lon']
-    desc = sites[site]['desc']
-    siteVisible = sites[site]['siteVisible']
-    return render_template('site.html', name=site, lat=lat, lon=lon, desc=desc, siteVisible=siteVisible)
+# View a study
+@app.route('/study/<study>')
+def study(study):
+    study = int(study)
+    
+    # Check if the study exists
+    global studies
+    if study not in studies:
+        redirect('/studies_manager')
+    
+    # Get the information
+    name = studies[study]['name']
+    desc = studies[study]['desc']
+    lat = studies[study]['lat']
+    lon = studies[study]['lon']
+    studyVisible = studies[study]['studyVisible']
+    
+    # Map
+    map = folium.Map(location=[lat,lon])
+    shapefile_path = studies[study]['shapefile_path']
+    files = [f for f in os.listdir(shapefile_path) if f.endswith(('.shp','.shx'))]
+    for file in files:
+        shape = gpd.read_file(os.path.join(shapefile_path, file))
+        folium.GeoJson(data=shape).add_to(map)
+    iframe = map.get_root()._repr_html_()
+    
+    return render_template('study.html', name=name, lat=lat, lon=lon, desc=desc, studyVisible=studyVisible, iframe=iframe)

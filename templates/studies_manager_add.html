@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add a site</title>
+    <title>Add a study</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
 
@@ -17,7 +17,7 @@
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item"> <a class="nav-link" href="/">Visualize data</a> </li>
-                    <li class="nav-item"> <a class="nav-link" href="/sites_manager">Manage the sites</a></li>
+                    <li class="nav-item"> <a class="nav-link" href="/studies_manager">Manage the studies</a></li>
                 </ul>
             </div>
         </div>
@@ -28,38 +28,46 @@
         <div class="row mb-3">
 
             <!--Form-->
-            <form id="formSite">
+            <form id="formStudy">
                 <div class="card">
                     <div class="card-header">
-                        Site information
+                        Study information
                     </div>
 
                     <div class="card-body">
                         <!--Name-->
                         <div class="row mb-3">
                             <div class="col-md-12">
-                                <label for="siteName">Site name</label>
-                                <input class="form-control" type="text" id="siteName" name="siteName" required>
+                                <label for="studyName">Study name *</label>
+                                <input class="form-control" type="text" id="studyName" name="studyName" required>
                             </div>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
                         </div>
 
                         <!--Description-->
                         <div class="row mb-3">
                             <div class="col-md-12">
-                                <label for="siteDesc">Description</label>
-                                <textarea class="form-control" id="siteDesc" name="siteDesc" cols="50" rows="4"></textarea>
+                                <label for="studyDesc">Description</label>
+                                <textarea class="form-control" id="studyDesc" name="studyDesc" cols="50" rows="4"></textarea>
                             </div>
                         </div>
 
                        <!--Coordinates-->
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="siteLat">Latitude</label>
-                                <input class="form-control" type="number" id="siteLat" name="siteLat" required>
+                                <label for="studyLat">Average latitude *</label>
+                                <input class="form-control" type="number" id="studyLat" name="studyLat" required>
                             </div>
                             <div class="col-md-6">
-                                <label for="siteLon">Longitude</label>
-                                <input class="form-control" type="number" id="siteLon" name="siteLon" required>
+                                <label for="studyLon">Average longitude *</label>
+                                <input class="form-control" type="number" id="studyLon" name="studyLon" required>
+                            </div>
+                        </div>
+
+                        <!--Shapefile-->
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="studyShapefile">Outline shapefile &lpar;.zip&rpar; *</label>
+                                <input class="form-control" type="file" accept=".zip" id="studyShapefile" name="studyShapefile" required> 
                             </div>
                         </div>
 
@@ -71,7 +79,7 @@
         <div class="row mb-3">
             <div class="col-md-12">
                 <!--Button-->
-                <button type="button" class="btn btn-primary" id="submitSiteButton">Create the site</button>
+                <button type="button" class="btn btn-primary" id="submitStudyButton">Create the study</button>
             </div>
         </div>
 
@@ -79,6 +87,6 @@
     
 </body>
 
-<script src="{{ url_for("static", filename="js/sites_manager_add.js") }}"></script>
+<script src="{{ url_for("static", filename="js/studies_manager_add.js") }}"></script>
 
 </html>

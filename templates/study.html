@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage study</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+
+<body>
+    { padding-top: 70px ;}
+    <!--Navbar-->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Dashboard</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"> <a class="nav-link" href="/">Visualize data</a> </li>
+                    <li class="nav-item"> <a class="nav-link" href="/studies_manager">Manage the studies</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!--Main content-->
+    <div class="container pt-5">
+        <div class="card">
+
+            <!--Header-->
+            <div class="card-header">
+                <div class="row">
+
+                    <!--Name of the study-->
+                    <div class="col-md-6">
+                        {{ name|safe }}
+                    </div>
+
+                    <!--Visibility-->
+                    <div class="col-md-2">
+                        <div class="row mx-1">
+                            {% if studyVisible %}
+                                <button type="button" class="btn btn-primary" id="visibilityButton">Make private</button>
+                            {% else %}
+                                <button type="button" class="btn btn-primary" id="visibilityButton">Make public</button>
+                            {% endif %}
+                        </div>  
+                    </div>
+
+                    <!--Modify the study-->
+                    <div class="col-md-2">
+                        <div class="row">
+                            <button type="button" class="btn btn-warning" id="modifyStudyButton">Modify the study</button>
+                        </div>
+                    </div>
+
+                    <!--Delete the study-->
+                    <div class="col-md-2">
+                        <div class="row mx-1">
+                            <button type="button" class="btn btn-danger" id="deleteStudyButton">Delete the study</button>
+                        </div>  
+                    </div>
+
+                </div>
+            </div>
+
+            <!--Informations-->
+            <div class="card-body">
+
+                <!--Description-->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label for="studyDesc">Description</label>
+                        <textarea class="form-control" id="studyDesc" cols="50" rows="4" readonly>{{ desc|safe }}</textarea>
+                    </div>
+                </div>
+
+                <!--Coordinates-->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="studyLat">Latitude</label>
+                        <input class="form-control" type="number" id="studyLat" value={{ lat|safe }} readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="studyLon">Longitude</label>
+                        <input class="form-control" type="number" id="studyLon" value={{ lon|safe }} readonly>
+                    </div>
+                </div>
+
+                <!--Map-->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        {{ iframe|safe }}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+    
+</body>
+
+<script src="{{ url_for("static", filename="js/study.js") }}"></script>
+
+</html>
