@@ -17,7 +17,7 @@ import geopandas as gpd
 # Set up
 #####
 
-# Set up the logging
+# Set up the logger
 os.makedirs('logs', exist_ok=True)
 logging_config = {
     'version': 1,
@@ -77,11 +77,12 @@ try:
             lat FLOAT,
             lon FLOAT,
             dir_path TEXT,
-            studyVisible BOOL
+            visibility BOOL
         )
     ''')
-    con.commit()
+    con.commit() 
     logger.info('Connection to the history database established.')
+    
 except Exception as e:
     logger.error(f'An error has occured while trying to connect to the database: {e}.')
 
@@ -95,7 +96,7 @@ try:
         studies[row[0]]['lat'] = row[3]
         studies[row[0]]['lon'] = row[4]
         studies[row[0]]['dir_path'] = row[5]
-        studies[row[0]]['studyVisible'] = (row[6] == 1)
+        studies[row[0]]['visibility'] = (row[6] == 1)
     con.close()
     logger.info('Studies data retrieved succesfuly from the database.')
 except Exception as e:
@@ -103,7 +104,7 @@ except Exception as e:
 
  
 # Set up the app
-app = Flask('Data Dashboard', static_folder='static', template_folder='templates')
+app = Flask('Data Dashboard')
 
 
 
@@ -129,26 +130,17 @@ def folium_outline(poly, text=None):
     return obj
 
 
-#####
-# Give data to JavaScript
-#####
-
-# Give the studies to the JavaScript to animate the list of studies
-@app.route('/datajs/studies')
-def datajs_studies():
-    global studies
-    return jsonify(list(studies.keys()))
-
-
 
 #####
 # Visualization dashboard
 #####
-@app.route('/')
+
+# Empty map
+@app.route('/dashboard')
 def dashboard():
     map = folium.Map()
-    iframe = map.get_root()._repr_html_()
-    return render_template('dashboard.html', iframe=iframe)
+    iframe = map._repr_html_()
+    return jsonify({'iframe': str(iframe)})
 
 
 
@@ -156,36 +148,37 @@ def dashboard():
 # Studies manager
 #####
 
-# List of the studies
+# List of the studies and map with the points
 @app.route('/studies_manager')
 def studies_manager():
     global studies
-    # Map
-    map = folium.Map()
-    for study in studies.keys():
-        folium.Marker(
-            location=[studies[study]['lat'], studies[study]['lon']],
-            tooltip=studies[study]['name'],
-            icon=folium.Icon(color='green')
-        ).add_to(map)
-    iframe = map.get_root()._repr_html_()
-    # List of studies
-    studiesList = [{'id':study, 'name':studies[study]['name'], 'visible':studies[study]['studyVisible']} for study in studies.keys()]
-    return render_template('studies_manager.html', iframe=iframe, studies=studiesList)
+    
+    try:
+        # Map
+        map = folium.Map()
+        for study in studies.keys():
+            folium.Marker(
+                location=[studies[study]['lat'], studies[study]['lon']],
+                tooltip=studies[study]['name'],
+                icon=folium.Icon(color='green')
+            ).add_to(map)
+        iframe = map.get_root()._repr_html_()
+        
+        # List of studies
+        studiesList = [{'id':study, 'name':studies[study]['name'], 'visibility':studies[study]['visibility']} for study in studies.keys()]
+        return jsonify({'status':'success', 'iframe':str(iframe), 'studies':studiesList})
 
-
-# Page for the creation of a study
-@app.route('/studies_manager/add')
-def studies_manager_add():
-    return render_template('studies_manager_add.html')
+    except Exception as e:
+        logger.error(f'Failed to retrieve the data for the studies manager: {e}.')
+        return jsonify({'status':'error'})
 
 
 # Create the study and register it in the dictionnary and the database
 @app.route('/studies_manager/create', methods=['POST'])
 def studies_manager_create():
 
+    # Get the form data
     try:
-        # Get the form data
         name = request.form.get('studyName')
         desc = request.form.get('studyDesc')
         lat = request.form.get('studyLat')
@@ -194,7 +187,7 @@ def studies_manager_create():
         
     except Exception as e:
         # Return the error
-        logger.info(f'An error has occured while getting the request: {e}.')
+        logger.error(f'An error has occured while getting the request: {e}.')
         return jsonify({'status':'error'})
     
     # Add the study to the database 1/2
@@ -211,7 +204,7 @@ def studies_manager_create():
             ) VALUES (?, ?, ?, ?)
         ''', (
             name,
-            desc.lstrip(),
+            desc,
             lat,
             lon
         ))
@@ -219,7 +212,7 @@ def studies_manager_create():
         
     except Exception as e:
         # Return the error
-        logger.info(f'An error has occured while trying to create the study: {e}.')
+        logger.error(f'An error has occured while trying to create the study: {e}.')
         return jsonify({'status':'error'})
     
     # Get the id
@@ -231,12 +224,12 @@ def studies_manager_create():
     os.makedirs(dir_path, exist_ok=False)
     os.makedirs(os.path.join(dir_path, 'temp'), exist_ok=True)
     
+    # Add the study to the database 2/2
     try:
-        # Add the study to the database 2/2
         cursor.execute('''
             UPDATE studies
             SET dir_path = ?,
-                studyVisible = ?
+                visibility = ?
             WHERE id = ?
         ''', (
             dir_path,
@@ -258,9 +251,10 @@ def studies_manager_create():
         # Delete the directory
         shutil.rmtree(dir_path)
         # Return the error
-        logger.info(f'An error has occured while trying to create the study: {e}.')
+        logger.error(f'An error has occured while trying to create the study: {e}.')
         return jsonify({'status':'error'})
     
+    # Download the shapefile
     try:
         # Download the zipfile
         temp_zip = os.path.join(dir_path, 'temp', 'outline.zip')
@@ -297,7 +291,7 @@ def studies_manager_create():
         # Delete the directory
         shutil.rmtree(dir_path)
         # Return the error
-        logger.info(f'An error has occured while trying to download the file: {e}.')
+        logger.error(f'An error has occured while trying to download the file: {e}.')
         return jsonify({'status':'error'})
     
     con.close()
@@ -306,94 +300,108 @@ def studies_manager_create():
     global studies
     studies[study_id] = {}
     studies[study_id]['name'] = name 
-    studies[study_id]['desc'] = desc.lstrip() 
+    studies[study_id]['desc'] = desc 
     studies[study_id]['lat'] = lat
     studies[study_id]['lon'] = lon
     studies[study_id]['dir_path'] = dir_path
-    studies[study_id]['studyVisible'] = False
+    studies[study_id]['visibility'] = False
     
     # Return the success
     logger.info(f'The study "{name}" was created succesfuly.')
-    return jsonify({'status':'success', 'study':study_id})
+    return jsonify({'status':'success', 'id':study_id})
     
     
-
 
 #####
 # View and modify a study
 #####
 
-# View a study
+# Give the data of a study
 @app.route('/study/<study>')
 def study(study):
-    study = int(study)
+    studyID = int(study)
     
-    # Check if the study exists
-    global studies
-    if study not in studies:
-        redirect('/studies_manager')
+    try: 
+        # Check if the study exists
+        global studies
+        if studyID not in studies:
+            logger.info(f'No existing data for the study with ID {studyID}.')
+            return jsonify({'status':'error'})
+        
+        # Get the information
+        name = studies[studyID]['name']
+        desc = studies[studyID]['desc']
+        lat = studies[studyID]['lat']
+        lon = studies[studyID]['lon']
+        visibility = studies[studyID]['visibility']
+        
+        return jsonify({'status':'success', 'name':name, 'lat':lat, 'lon':lon, 'desc':desc, 'visibility':visibility})
     
-    # Get the information
-    name = studies[study]['name']
-    desc = studies[study]['desc']
-    lat = studies[study]['lat']
-    lon = studies[study]['lon']
-    studyVisible = studies[study]['studyVisible']
+    except Exception as e:
+        logger.error(f'An error has occured while trying to retrieve data for the study with ID {studyID}: {e}.')
+        return jsonify({'status':'error'})
     
-    # Map
-    map = folium.Map(location=[lat,lon])
-    folder = os.path.join(studies[study]['dir_path'], 'outline')
-    file = [f for f in os.listdir(folder) if f.endswith('.shp')][0]
-    shape = gpd.read_file(os.path.join(folder, file))
-    shape.to_crs(epsg=4326, inplace=True)
     
-    # Display the zone
-    for _, zone in shape.iterrows():
-        if zone.geometry.geom_type == 'Polygon':
-            poly = folium_outline(zone.geometry, text=name)
-            poly.add_to(map)
-        elif zone.geometry.geom_type == 'MultiPolygon':
-            names = []
-            for subzone in list(zone.geometry.geoms):
-                poly = folium_outline(subzone, text=name)
+# Give the map of a study
+@app.route('/study/<study>/map')
+def study_map(study):
+    studyID = int(study)
+    
+    try:
+        # Check if the study exists
+        global studies
+        if studyID not in studies:
+            logger.info(f'No existing data for the study with ID {studyID}.')
+            return jsonify({'status':'error'})
+        
+        # Get the information
+        name = studies[studyID]['name']
+        lat = studies[studyID]['lat']
+        lon = studies[studyID]['lon']
+        
+        # Map
+        map = folium.Map(location=[lat,lon])
+        folder = os.path.join(studies[studyID]['dir_path'], 'outline')
+        file = [f for f in os.listdir(folder) if f.endswith('.shp')][0]
+        shape = gpd.read_file(os.path.join(folder, file))
+        shape.to_crs(epsg=4326, inplace=True)
+        
+        # Display the zone
+        for _, zone in shape.iterrows():
+            if zone.geometry.geom_type == 'Polygon':
+                poly = folium_outline(zone.geometry, text=name)
                 poly.add_to(map)
-            
-    iframe = map.get_root()._repr_html_()
-    
-    return render_template('study.html', name=name, lat=lat, lon=lon, desc=desc, studyVisible=studyVisible, iframe=iframe)
+            elif zone.geometry.geom_type == 'MultiPolygon':
+                for subzone in list(zone.geometry.geoms):
+                    poly = folium_outline(subzone, text=name)
+                    poly.add_to(map)
+                    
+        iframe = map.get_root()._repr_html_()
+        return jsonify({'status':'success', 'iframe':str(iframe)})
+                    
+    except Exception as e:
+        logger.error(f'An error has occured while trying to retrieve data for the study with ID {studyID}: {e}.')
+        return jsonify({'status':'error'})
 
 
 # Modify a study
-@app.route('/study/modify/<study>', methods=['GET'])
+@app.route('/study/<study>/modify', methods=['POST'])
 def study_modify(study):
-    study = int(study)
-    
-    # Get the data
-    global studies
-    name = studies[study]['name']
-    desc = studies[study]['desc']
-    lat = studies[study]['lat']
-    lon = studies[study]['lon']
-    
-    return render_template('study_modify.html', name=name, desc=desc, lat=lat, lon=lon)
-
-
-# Submit the modifications
-@app.route('/study/submit_modif/<study>', methods=['POST'])
-def study_submit_modif(study):
-    study = int(study)
+    studyID = int(study)
     
     try:
         # Get the form data
+        name = request.form.get('studyName')
         desc = request.form.get('studyDesc')
         lat = request.form.get('studyLat')
         lon = request.form.get('studyLon')
         
         # Modify the study in the dictionnary
         global studies
-        studies[study]['desc'] = desc.lstrip()
-        studies[study]['lat'] = lat
-        studies[study]['lon'] = lon
+        studies[studyID]['name'] = name
+        studies[studyID]['desc'] = desc
+        studies[studyID]['lat'] = lat
+        studies[studyID]['lon'] = lon
         
         # Modify the study in the database
         studies_db_path = os.path.join('data', 'studies.db')
@@ -401,68 +409,72 @@ def study_submit_modif(study):
         cursor = con.cursor()
         cursor.execute('''
             UPDATE studies
-            SET desc = ?,
+            SET name = ?,
+                desc = ?,
                 lat = ?,
                 lon = ?
             WHERE id = ?
         ''', (
-            desc.lstrip(),
+            name,
+            desc,
             lat,
             lon,
-            study
+            studyID
         ))
         con.commit()
         con.close()
         
-        logger.info(f'The study "{study}" was modified succesfuly.')
-        return jsonify({'status':'success', 'study':study})
+        logger.info(f'The study with ID {studyID} was modified succesfuly.')
+        return jsonify({'status':'success'})
     
     except Exception as e:
-        logger.info(f'An error has occured while trying to modify the study: {e}.')
+        logger.error(f'An error has occured while trying to modify the study with ID {studyID}: {e}.')
         return jsonify({'status':'error'})
 
 
 # Manage the visibility
-@app.route('/study/visibility/<study>')
+@app.route('/study/<study>/visibility', methods=['POST'])
 def study_visibility(study):
-    study = int(study)
+    studyID = int(study)
     
     global studies
-    if study not in studies:
+    if studyID not in studies:
+        logger.info(f'Cannot change the visibility, no study with ID {studyID}.')
         return jsonify({'status':'error'})
+    
     else:
-        
-        new_state = not(studies[study]['studyVisible'])
+        new_state = not(studies[studyID]['visibility'])
         # Change in the dictionnary
-        studies[study]['studyVisible'] = new_state
+        studies[studyID]['visibility'] = new_state
         # Change in the database
         studies_db_path = os.path.join('data', 'studies.db')
         con = sqlite3.connect(studies_db_path)
         cursor = con.cursor()
         cursor.execute('''
             UPDATE studies
-            SET studyVisible = ?
+            SET visibility = ?
             WHERE id = ?
         ''', (
             new_state,
-            study
+            studyID
         ))
         con.commit()
         con.close()
         
-        return jsonify({'status':'success', 'state':new_state})
+        return jsonify({'status':'success', 'visibility':new_state})
 
 
 # Delete the study
-@app.route('/study/delete/<study>', methods=['POST'])
+@app.route('/study/<study>/delete', methods=['POST'])
 def study_delete(study):
-    study = int(study)
+    studyID = int(study)
     
     global studies
-    if study not in studies:
+    if studyID not in studies:
+        logger.info(f'Cannot delete, no study with ID {studyID}.')
         return jsonify({'status':'error'})
+    
     else:
-            
         # Delete from the database
         studies_db_path = os.path.join('data', 'studies.db')
         con = sqlite3.connect(studies_db_path)
@@ -471,27 +483,17 @@ def study_delete(study):
             DELETE FROM studies
             WHERE id = ?
         ''', (
-            study,
+            studyID,
         ))
         con.commit()
         con.close()
         
         # Delete the folder
-        dir_path = studies[study]['dir_path']
+        dir_path = studies[studyID]['dir_path']
         shutil.rmtree(dir_path)
         
         # Delete from the dictionnary
-        name = studies[study]['name']
-        studies.pop(study)
+        studies.pop(studyID)
 
-        logger.info(f'The study {name} has been deleted successfuly.')
+        logger.info(f'The study with ID {studyID} has been deleted successfuly.')
         return jsonify({'status':'success'})
-
-
-# Add a file to the study
-@app.route('/study/add_file/<study>')
-def study_add_file(study):
-    study = int(study)
-    global studies
-    name = studies[study]['name']
-    return render_template('study_add_file.html', name=name)
